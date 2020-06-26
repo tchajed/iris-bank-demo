@@ -15,6 +15,4 @@ The demo is entirely in a single well-commented Coq file [demo.v](src/demo.v).
 
 ## Compiling
 
-To compile, just run `make`. You'll need Coq with Iris installed. It should work
-on Coq v8.11, but there's no CI (yet) and it's only tested on Coq master so who
-knows.
+To compile, just run `make`. You'll need Coq with Iris installed.
