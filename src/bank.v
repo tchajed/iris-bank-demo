@@ -10,11 +10,10 @@ like [forall x, x = x]. *)
 Iris *)
 From iris.heap_lang Require Import proofmode notation.
 From iris.heap_lang.lib Require Import lock spin_lock.
-(* Ghost state in Iris can be from any resource algebra (for experts: yes, the
-story is a little more complicated than that). This proof will use an extremely
-simple form of ghost state, from excl_auth. *)
+(* we'll use this library to set up ghost state later *)
 From iris.algebra Require Import lib.excl_auth.
 
+(* set some Coq options for basic sanity *)
 Set Default Proof Using "Type".
 Set Printing Projections.
 Open Scope Z_scope.
@@ -44,10 +43,12 @@ else (like reading balances).
 - ref allocates a new reference with an initial value
 - # is the constructor to turn something into a value, for example #0 is an
     integer ([Z]) value, and #() is a unit
-- ! dereferences
+- !l dereferences a pointer l (we use "l" for "location")
 - many constructs have a colon to disambiguate them from the analogous Coq
   syntax
 - this language has no static type system
+- [λ: <>, ...] uses <> for an anonymous binder, much like _ in Coq and other
+  languages.
 
  *)
 
@@ -63,9 +64,8 @@ Definition new_bank: val :=
     a lock and a pointer to its balance *)
      (("lk_a", "a_bal"), ("lk_b", "b_bal")).
 
-(** transfer is what we want to prove safe, but we won't do anything to prove
-that this function does anything interesting since that requires more setup in
-the concurrent setting *)
+(** transfer is what we want to prove safe, but we won't prove that it actually
+modifies the bank state correctly because it requires more setup. *)
 Definition transfer: val :=
   λ: "bank" "amt",
   let: "a" := Fst "bank" in
@@ -101,6 +101,22 @@ Definition demo_check_consistency: val :=
   Fork (transfer "bank" #5);;
   check_consistency "bank".
 
+
+(* We'll now switch over to reasoning in the logic.
+
+The syntax for separation logic stuff here includes:
+- [P ∗ Q] (note that's a unicode symbol) is separating conjunction. This binds
+  weakly so that we don't need parentheses around every conjunct.
+- [P -∗ Q] is separating implication (think of it as P implies Q and just
+  remember that (P -∗ Q) ∗ P ⊢ Q)
+- [⌜φ⌝] embeds a "pure" (Coq) proposition [φ: Prop] into separation logic
+- [∃ (x:T), ...] is overloaded to also work within separation logic. This is so
+  natural you can easily forget that separation logic and Coq exists aren't the
+  same thing.
+- [|==> P] uses a "modality" (the [|==>] part) to say that after some change in
+  ghost state, it produces resources satisfying P.
+*)
+
 Section heap.
 
   (* to do this proof we need some simple ghost state - the details of the
@@ -119,12 +135,21 @@ Section heap.
   proof, since this is ghost state), derive that the fragment and authority
   agree on the same value, and update the variable if we have both *)
 
+  (* Iris has very general support for user-extensible ghost state. We won't
+  explain how that works here, so you can ignore the proofs of this library and
+  just look at the specs for this particular type of ghost state. Other forms of
+  ghost state let you express more complicated protocols and sharing patterns
+  between threads. *)
+
+(* you can ignore these; this mini-library is parameterized by a bunch of very
+general things *)
 Definition ghostR (A: ofeT) := authR (optionUR (exclR A)).
 Context {A: ofeT} `{Hequiv: @LeibnizEquiv _ A.(ofe_equiv)} `{Hdiscrete: OfeDiscrete A}.
 Context {Σ} {Hin: inG Σ (authR (optionUR (exclR A)))}.
 
-(* Allocation is an update to ghost state, represented by the [|==>]. Basically
-during a program proof (a WP) we have the right to do this. *)
+(* Allocation is an update to ghost state, represented by the [|==>] (the
+"update modality"). Basically during a program proof (a WP) we have the right to
+do this. *)
 Lemma ghost_var_alloc (a: A) :
   ⊢ |==> ∃ γ, own γ (●E a) ∗ own γ (◯E a).
 Proof using.
@@ -134,10 +159,8 @@ Proof using.
 Qed.
 
 (* This says the two parts agree, written using _separating implication_ (also
-pronounced "magic wand" but that obscures its meaning). Because the conclusion
-is persistent (roughly, it consumes no resources / is duplicable, though neither
-is these is exactly correcy), applying this theorem will not consume the inputs
-even though in general that's what happens in separation logic. *)
+pronounced "magic wand" but that obscures its meaning). You can read [-∗]
+exactly like [->] and you'll basically have the right intuition. *)
 Lemma ghost_var_agree γ (a1 a2: A) :
   own γ (●E a1) -∗ own γ (◯E a2) -∗ ⌜ a1 = a2 ⌝.
 Proof using All.
@@ -177,19 +200,7 @@ Let N := nroot.@"bank".
 (* We can now talk about [iProp Σ], the type of Iris propositions. This includes
 the [own] fact we saw above for ghost resources, [l ↦ v] for the usual points-to
 in HeapLang, and all the separation logic connectives. You can ignore the [Σ]
-which is there for technical reasons.
-
-The syntax for separation logic stuff here includes:
-- [P ∗ Q] (note that's a unicode symbol) is separating conjunction. This binds
-  weakly so that we don't need parentheses around every conjunct.
-- [P -∗ Q] is separating implication (think of it as P implies Q and just
-  remember that (P -∗ Q) ∗ Q ⊢ Q)
-- [⌜φ⌝] embeds a "pure" (Coq) proposition [φ: Prop] into separation logic
-- [∃ (x:T), ...] is overloaded to also work within separation logic. This is so
-  natural you can easily forget that separation logic and Coq exists aren't the
-  same thing.
-
- *)
+which is there for technical reasons. *)
 
 (** account_inv is the lock invariant associated with each account. It exposes a
 ghost name [γ] used to tie the account balance to a ghost variable. *)
@@ -200,15 +211,14 @@ Definition account_inv γ bal_ref : iProp Σ :=
 Definition is_account (acct: val) γ : iProp Σ :=
   ∃ (bal_ref: loc) lk,
     ⌜acct = (lk, #bal_ref)%V⌝ ∗
-    (* the important part of [is_lock] is the lock invariant, expressed as an
-    arbitrary Iris proposition [iProp Σ]. *)
+    (* The important part of [is_lock] is the lock invariant, expressed as an
+    arbitrary Iris proposition [iProp Σ]. The idea of lock invariants is that
+    first we associate a lock invariant [P] with the lock (we're doing that
+    here). Then when we acquire the lock we get (resources satisfying) [P], and
+    when we release it we have to give back (resources satisfying) [P].
+    Crucially during the critical section we have access to [P] and can violate
+    this proposition freely. *)
     ∃ (γl: gname), is_lock γl lk (account_inv γ bal_ref).
-
-Record ghost_names :=
-  mkNames {
-    acct1_name: gname;
-    acct2_name: gname;
-  }.
 
 (** bank_inv is the invariant (the usual one that holds at all intermediate
 points) that holds the authoritative fragments for the account balances and
@@ -216,28 +226,35 @@ importantly states that they are always equal. Any thread can open the invariant
 to "read" the logical balances, but modifications must respect the constraint
 here.
 
-We need to say where the logical account balances are so this has a record with
-their two ghost names.
+We need to say where the logical account balances are so this definition also
+takes two ghost names.
 
  *)
-Definition bank_inv (γ: ghost_names) : iProp Σ :=
+Definition bank_inv (γ: gname * gname) : iProp Σ :=
   (* the values in the accounts are arbitrary... *)
   ∃ (bal1 bal2: Z),
-     own γ.(acct1_name) (●E bal1) ∗
-     own γ.(acct2_name) (●E bal2) ∗
+     own γ.1 (●E bal1) ∗
+     own γ.2 (●E bal2) ∗
      (* ... except that they add up to 0 *)
      ⌜(bal1 + bal2)%Z = 0⌝.
 
 (** finally [is_bank] ties everything together, the accounts and invariant *)
 Definition is_bank (b: val): iProp Σ :=
-  ∃ (acct1 acct2: val) (γ: ghost_names),
+  ∃ (acct1 acct2: val) (γ: gname*gname),
   ⌜b = (acct1, acct2)%V⌝ ∗
-  is_account acct1 γ.(acct1_name) ∗
-  is_account acct2 γ.(acct2_name) ∗
+  is_account acct1 γ.1 ∗
+  is_account acct2 γ.2 ∗
   inv N (bank_inv γ).
 
 (* Importantly [is_bank b] is _persistent_, which means we can share it among
-threads. We'll see this used in [wp_demo_check_consistency]. *)
+threads. We'll see this used in [wp_demo_check_consistency].
+
+This proofs goes through because the components of [is_bank] are persistent.
+These include the pure facts (it should be intuitive that these are persistent,
+since they don't talk about resources at all), the invariant (because [inv N P]
+is just knowledge of an invariant, which can and should be shared) and [is_lock
+γl lk P] (similarly, this is knowledge that there is a lock at lk and is
+shareable) *)
 Instance is_bank_Persistent b : Persistent (is_bank b).
 Proof. apply _. (* this proof is actually automatic *) Qed.
 
@@ -248,8 +265,11 @@ invariant holding [P] you have to prove [P].
 These ghost operations correspond to [iMod] in these proofs, which uses theorems
 with [|==>] and [==∗]. *)
 Theorem wp_new_bank :
+  (* This is a Hoare triple using Iris's program logic. *)
   {{{ True }}}
     new_bank #()
+    (* the [b,] part is a shorthand for [∃ b, ...] in the postcondition, and RET
+    b says the function returns b. *)
   {{{ b, RET b; is_bank b }}}.
 Proof.
   iIntros (Φ) "_ HΦ".
@@ -264,14 +284,14 @@ Proof.
   wp_apply (newlock_spec (account_inv γ2 b_ref) with "[Hb Hγ2]").
   { iExists _; iFrame. }
   iIntros (lk_b γlk2) "Hlk2".
-  set (γ:=mkNames γ1 γ2).
-  iMod (inv_alloc N _ (bank_inv γ) with "[Hown1 Hown2]") as "Hinv".
+  iMod (inv_alloc N _ (bank_inv (γ1,γ2)) with "[Hown1 Hown2]") as "Hinv".
   { iNext. iExists _, _; iFrame.
     iPureIntro; auto. }
   wp_pures.
   iApply "HΦ".
-  iExists _, _, γ; iFrame.
+  iExists _, _, (γ1,γ2); iFrame.
   iSplit; first eauto.
+  simpl.
   iSplitL "Hlk1".
   - iExists _; eauto with iFrame.
   - iExists _; eauto with iFrame.
@@ -308,6 +328,20 @@ Proof.
   iDestruct "Haccount1" as (bal1) "(Hbal1&Hown1)".
   iDestruct "Haccount2" as (bal2) "(Hbal2&Hown2)".
 
+  (* If you look at the proof goal now, there are a bunch of things going on.
+  The Iris Proof Mode (IPM) embeds a separation logic context within the Coq
+  goal. This means we have the Coq context and the IPM context. Furthermore, it
+
+  actually uses two contexts: a persistent context (which comes first and is
+  separated by ---------□) of facts that are duplicable and thus don't go away
+  when we need to split, and then a spatial context (separated by ---------∗) of
+  ordinary spatial premises. The IPM view and tactics let us manipulate these in
+  a way similar to how Coq hypotheses work, making proofs in separation logic as
+  easy as normal Coq proofs (sort of - separation logic does add some
+  difficulties to proofs that are fundamental). Learning these tactics is a lot
+  like learning how to do Coq proofs all over again (that is, you need to do it
+  but it's not that hard and you do get used to it). *)
+
   (* this steps through the critical section *)
   wp_pures; wp_load; wp_pures; wp_store; wp_pures.
   wp_pures; wp_load; wp_pures; wp_store; wp_pures.
@@ -315,22 +349,31 @@ Proof.
   (* Now the physical state is updated but not the logical balances in ghost
   state. In order to restore the lock invariant, we have to do that, and this
   requires using the invariant with [iInv]. *)
-  rewrite -fupd_wp.
-  iInv N as (bal1' bal2') ">(Hγ1&Hγ2&%)".
+  rewrite -fupd_wp. (* we need to do this for iInv to work *)
+  (* iInv opens the invariant for us and also takes a pattern to destruct the
+  resulting [bank_inv γ] right away. You can see that it gives us resources in
+  the context but also adds [bank_inv] to the goal, since this invariant needs
+  to hold at all points. *)
+  iInv "Hinv" as (bal1' bal2') ">(Hγ1&Hγ2&%)".
   (* we use the agreement and update theorems above for these ghost variables *)
   iDestruct (ghost_var_agree with "Hγ1 [$]") as %->.
   iDestruct (ghost_var_agree with "Hγ2 [$]") as %->.
   iMod (ghost_var_update (bal1-amt) with "Hγ1 Hown1") as "(Hγ1&Hown1)".
   iMod (ghost_var_update (bal2+amt) with "Hγ2 Hown2") as "(Hγ2&Hown2)".
   iModIntro.
-  (* now we have to re-prove the invariant to continue *)
+  (* we can't just modify ghost state however we want - to continue, [iInv]
+  added [bank_inv] to our goal to prove, requiring us to restore the
+  invariant *)
   iSplitL "Hγ1 Hγ2".
   { iNext. iExists _, _; iFrame.
     iPureIntro.
     lia. }
   iModIntro.
 
-  (* Now we'll be able to release both locks (in any order, actually) by
+  (* We've done all the hard work of maintaining the invariant and updating the
+  ghost variables to their new values.
+
+  Now we'll be able to release both locks (in any order, actually) by
   re-proving their lock invariants, with the new values of the ghost
   variables. *)
   wp_apply (release_spec with "[$Hlk2 $Hlocked2 Hbal2 Hown2]").
