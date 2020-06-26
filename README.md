@@ -11,7 +11,7 @@ move from one account to the other and a `check_consistency` operation that
 locks both balances and checks if the balances add up to zero. What we prove is
 that `check_consistency` always returns true, even with concurrent `transfer`s.
 
-The demo is entirely in a single well-commented Coq file [demo.v](src/demo.v).
+The demo is entirely in a single well-commented Coq file [bank.v](src/bank.v).
 
 ## Compiling
 
