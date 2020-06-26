@@ -1,5 +1,7 @@
 # Iris demo of a concurrent bank
 
+![CI](https://github.com/tchajed/iris-bank-demo/workflows/CI/badge.svg)
+
 Demo of using Iris to prove an that the balances of a concurrent bank sum to
 zero.
 
