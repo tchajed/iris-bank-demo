@@ -1,0 +1,11 @@
+*.vo
+*.vos
+*.vok
+*.glob
+.*.aux
+.lia.cache
+
+# auto-generated
+Makefile.coq
+Makefile.coq.conf
+.Makefile.coq.d
