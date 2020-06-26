@@ -1,3 +1,11 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
 runs-on: ubuntu-latest
 strategy:
   matrix:
