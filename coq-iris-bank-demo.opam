@@ -13,7 +13,7 @@ Proof that a simple bank-like program maintains a constant sum of balances.
 """
 
 depends: [
-  "coq" {>= "8.11"}
+  "coq" {>= "8.12"}
   "coq-iris" {>= "dev.2020-04-07.0.86b62616" | (>= "3.2.0" & < "4.0") | = "dev"}
 ]
 
