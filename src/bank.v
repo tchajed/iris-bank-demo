@@ -10,11 +10,11 @@ like [forall x, x = x]. *)
 Iris *)
 From iris.heap_lang Require Import proofmode notation.
 From iris.heap_lang.lib Require Import lock spin_lock.
-(* we'll use this library to set up ghost state later *)
-From iris.algebra Require Import lib.excl_auth.
+From iris.base_logic Require Import lib.ghost_var.
 
 (* set some Coq options for basic sanity *)
 Set Default Proof Using "Type".
+Set Default Goal Selector "!".
 Set Printing Projections.
 Open Scope Z_scope.
 
@@ -119,82 +119,10 @@ The syntax for separation logic stuff here includes:
 
 Section heap.
 
-  (* to do this proof we need some simple ghost state - the details of the
-  construction aren't very important, but we'll explain what properties these
-  resources have *)
-
-  (* The two resources are written [own γ (●E a)] and [own γ (◯E a)], where
-  [(a:A)] is an element of an arbitrary type. We pronounce the first one
-  "authoritative ownership" and the second the "fragmentary ownership", but
-  because this is exclusive ownership (represented by the E), these two are
-  symmetric. Generally the authoritative goes in an invariant and we hand out
-  the fragment in lock invariants and such. There's also a _ghost name_, which
-  uses the metavariable [γ], to identify this particular variable.
-
-  We can do three things with these: allocate a pair of them (at any step in the
-  proof, since this is ghost state), derive that the fragment and authority
-  agree on the same value, and update the variable if we have both *)
-
-  (* Iris has very general support for user-extensible ghost state. We won't
-  explain how that works here, so you can ignore the proofs of this library and
-  just look at the specs for this particular type of ghost state. Other forms of
-  ghost state let you express more complicated protocols and sharing patterns
-  between threads. *)
-
-(* you can ignore these; this mini-library is parameterized by a bunch of very
-general things *)
-Definition ghostR (A: ofeT) := authR (optionUR (exclR A)).
-Context {A: ofeT} `{Hequiv: @LeibnizEquiv _ A.(ofe_equiv)} `{Hdiscrete: OfeDiscrete A}.
-Context {Σ} {Hin: inG Σ (authR (optionUR (exclR A)))}.
-
-(* Allocation is an update to ghost state, represented by the [|==>] (the
-"update modality"). Basically during a program proof (a WP) we have the right to
-do this. *)
-Lemma ghost_var_alloc (a: A) :
-  ⊢ |==> ∃ γ, own γ (●E a) ∗ own γ (◯E a).
-Proof using.
-  iMod (own_alloc (●E a ⋅ ◯E a)) as (γ) "[H1 H2]".
-  { apply excl_auth_valid. }
-  iModIntro. iExists γ. iFrame.
-Qed.
-
-(* This says the two parts agree, written using _separating implication_ (also
-pronounced "magic wand" but that obscures its meaning). You can read [-∗]
-exactly like [->] and you'll basically have the right intuition. *)
-Lemma ghost_var_agree γ (a1 a2: A) :
-  own γ (●E a1) -∗ own γ (◯E a2) -∗ ⌜ a1 = a2 ⌝.
-Proof using All.
-  iIntros "Hγ1 Hγ2".
-  iDestruct (own_valid_2 with "Hγ1 Hγ2") as "H".
-  iDestruct "H" as %<-%excl_auth_agree%leibniz_equiv.
-  done.
-Qed.
-
-(* This theorem lets us change ghost state. It requires the right to change
-ghost state, this time represented by the [==∗]. Unlike the previous theorem
-this consumes the old ownership and gives new resources, having modified the
-ghost variable. *)
-Lemma ghost_var_update {γ} (a1' a1 a2 : A) :
-  own γ (●E a1) -∗ own γ (◯E a2) ==∗
-    own γ (●E a1') ∗ own γ (◯E a1').
-Proof.
-  iIntros "Hγ● Hγ◯".
-  iMod (own_update_2 _ _ _ (●E a1' ⋅ ◯E a1') with "Hγ● Hγ◯") as "[$$]".
-  { apply excl_auth_update. }
-  done.
-Qed.
-
-(* it's also true that two auth or fragments for the same ghost name are
-contradictory, but we don't need that *)
-
-End heap.
-
-Section heap.
-
 (* mostly standard boilerplate *)
 Context `{!heapG Σ}.
 Context `{!lockG Σ}.
-Context `{!inG Σ (ghostR ZO)}.
+Context `{!ghost_varG Σ Z}.
 Let N := nroot.@"bank".
 
 (* We can now talk about [iProp Σ], the type of Iris propositions. This includes
@@ -205,7 +133,7 @@ which is there for technical reasons. *)
 (** account_inv is the lock invariant associated with each account. It exposes a
 ghost name [γ] used to tie the account balance to a ghost variable. *)
 Definition account_inv γ bal_ref : iProp Σ :=
-  ∃ (bal: Z), bal_ref ↦ #bal ∗ own γ (◯E bal).
+  ∃ (bal: Z), bal_ref ↦ #bal ∗ ghost_var γ (1/2) bal.
 
 (** an account is a pair of a lock and an account protected by the lock *)
 Definition is_account (acct: val) γ : iProp Σ :=
@@ -233,8 +161,8 @@ takes two ghost names.
 Definition bank_inv (γ: gname * gname) : iProp Σ :=
   (* the values in the accounts are arbitrary... *)
   ∃ (bal1 bal2: Z),
-     own γ.1 (●E bal1) ∗
-     own γ.2 (●E bal2) ∗
+     ghost_var γ.1 (1/2) bal1 ∗
+     ghost_var γ.2 (1/2) bal2 ∗
      (* ... except that they add up to 0 *)
      ⌜(bal1 + bal2)%Z = 0⌝.
 
@@ -276,11 +204,11 @@ Proof.
   wp_rec.
   wp_alloc a_ref as "Ha".
   wp_alloc b_ref as "Hb".
-  iMod (ghost_var_alloc (0: ZO)) as (γ1) "(Hown1&Hγ1)".
+  iMod (ghost_var_alloc 0) as (γ1) "(Hown1&Hγ1)".
   wp_apply (newlock_spec (account_inv γ1 a_ref) with "[Ha Hγ1]").
   { iExists _; iFrame. }
   iIntros (lk_a γlk1) "Hlk1".
-  iMod (ghost_var_alloc (0: ZO)) as (γ2) "(Hown2&Hγ2)".
+  iMod (ghost_var_alloc 0) as (γ2) "(Hown2&Hγ2)".
   wp_apply (newlock_spec (account_inv γ2 b_ref) with "[Hb Hγ2]").
   { iExists _; iFrame. }
   iIntros (lk_b γlk2) "Hlk2".
@@ -357,9 +285,13 @@ Proof.
   iInv "Hinv" as (bal1' bal2') ">(Hγ1&Hγ2&%)".
   (* we use the agreement and update theorems above for these ghost variables *)
   iDestruct (ghost_var_agree with "Hγ1 [$]") as %->.
+  iCombine "Hγ1 Hown1" as "Hγ1".
+  iMod (ghost_var_update (bal1-amt) with "Hγ1") as "(Hγ1&Hown1)".
+
   iDestruct (ghost_var_agree with "Hγ2 [$]") as %->.
-  iMod (ghost_var_update (bal1-amt) with "Hγ1 Hown1") as "(Hγ1&Hown1)".
-  iMod (ghost_var_update (bal2+amt) with "Hγ2 Hown2") as "(Hγ2&Hown2)".
+  iCombine "Hγ2 Hown2" as "Hγ2".
+  iMod (ghost_var_update (bal2+amt) with "Hγ2") as "(Hγ2&Hown2)".
+
   iModIntro.
   (* we can't just modify ghost state however we want - to continue, [iInv]
   added [bank_inv] to our goal to prove, requiring us to restore the
