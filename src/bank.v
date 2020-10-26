@@ -10,7 +10,7 @@ From iris.base_logic Require Import lib.ghost_var.
 
 (* we'll write this demo in HeapLang, a simple ML-like language shipped with
 Iris *)
-From iris.heap_lang Require Import proofmode notation.
+From iris.heap_lang Require Import proofmode notation adequacy.
 From iris.heap_lang.lib Require Import lock spin_lock.
 
 (* set some Coq options for basic sanity *)
@@ -428,3 +428,21 @@ Proof using All.
 Qed.
 
 End heap.
+
+Definition bankΣ: gFunctors := #[heapΣ; lockΣ; ghost_varΣ Z].
+
+Lemma demo_check_consistency_adequate σ1 :
+  adequate NotStuck (demo_check_consistency #()) σ1 (λ v _, v = #true).
+Proof.
+  eapply (heap_adequacy bankΣ) => ?.
+  iIntros "?". by iApply wp_demo_check_consistency.
+Qed.
+
+Theorem demo_check_consistency_exec_true σ1 v2 t2 σ2 :
+  rtc erased_step ([demo_check_consistency #()], σ1) (of_val v2 :: t2, σ2) →
+  v2 = #true.
+Proof.
+  intros Hexec.
+  apply (adequate_result _ _ _ _ (demo_check_consistency_adequate _)) in Hexec.
+  auto.
+Qed.
