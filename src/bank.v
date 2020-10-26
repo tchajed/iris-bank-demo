@@ -6,11 +6,12 @@
 (* meta point: standard coqdoc syntax uses square brackets to surround Coq code,
 like [forall x, x = x]. *)
 
+From iris.base_logic Require Import lib.ghost_var.
+
 (* we'll write this demo in HeapLang, a simple ML-like language shipped with
 Iris *)
 From iris.heap_lang Require Import proofmode notation.
 From iris.heap_lang.lib Require Import lock spin_lock.
-From iris.base_logic Require Import lib.ghost_var.
 
 (* set some Coq options for basic sanity *)
 Set Default Proof Using "Type".
@@ -126,12 +127,30 @@ Context `{!ghost_varG Σ Z}.
 Let N := nroot.@"bank".
 
 (* We can now talk about [iProp Σ], the type of Iris propositions. This includes
-the [own] fact we saw above for ghost resources, [l ↦ v] for the usual points-to
-in HeapLang, and all the separation logic connectives. You can ignore the [Σ]
-which is there for technical reasons. *)
+ownership of ghost variables, [l ↦ v] for the usual points-to in HeapLang, and
+all the separation logic connectives. You can ignore the [Σ] which is there for
+technical reasons. *)
+
+(** Verifying concurrent software generally require the use of _ghost state_,
+variables that are introduced into the program only for the sake of the proof.
+In some systems (like Dafny or VeriFast), ghost variables actually show up in
+the source code for the program being verified. In Iris, we'll only see ghost
+variables in the proof.
+
+ We'll now start writing down the invariant for this proof, and this is where
+ we'll reference the ghost variables. We do that with a proposition [ghost_var γ
+ q v], which says that the ghost variable with name [γ] has value [v], and we
+ own a fraction [q] (≤1) of it. Ghost variables in Iris are always a combination
+ of knowledge about the variable and ownership over it. The key idea is that to
+ change a ghost variable we need to assemble all the pieces of it, adding up to
+ a fraction of 1; this guarantees that no other thread is claiming ownership and
+ makes it sound to change its value without invalidating other threads' proofs. *)
 
 (** account_inv is the lock invariant associated with each account. It exposes a
-ghost name [γ] used to tie the account balance to a ghost variable. *)
+ghost name [γ] used to tie the account balance to a ghost variable. In the lock
+invariant we'll claim half ownership, while the other half will be in a
+system-wide invariant; this lets us reference the variable's value from both
+places and also assert that the lock is needed to change this balance. *)
 Definition account_inv γ bal_ref : iProp Σ :=
   ∃ (bal: Z), bal_ref ↦ #bal ∗ ghost_var γ (1/2) bal.
 
@@ -154,9 +173,13 @@ importantly states that they are always equal. Any thread can open the invariant
 to "read" the logical balances, but modifications must respect the constraint
 here.
 
-We need to say where the logical account balances are so this definition also
-takes two ghost names.
+We need to say where the logical (ghost) account balances are stored so this
+definition also takes two ghost names.
 
+As mentioned above, we claim half ownership here to reference the value of both
+ghost variables. This half is a bit different because it's in a regular
+invariant, so any thread can open this invariant to learn the logical balances
+sum to zero.
  *)
 Definition bank_inv (γ: gname * gname) : iProp Σ :=
   (* the values in the accounts are arbitrary... *)
