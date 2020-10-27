@@ -294,8 +294,8 @@ Proof.
   but it's not that hard and you do get used to it). *)
 
   (* this steps through the critical section *)
-  wp_pures; wp_load; wp_pures; wp_store; wp_pures.
-  wp_pures; wp_load; wp_pures; wp_store; wp_pures.
+  wp_load; wp_store; wp_pures.
+  wp_load; wp_store; wp_pures.
 
   (* Now the physical state is updated but not the logical balances in ghost
   state. In order to restore the lock invariant, we have to do that, and this
@@ -398,10 +398,10 @@ Proof.
   by iApply "HΦ".
 Qed.
 
-(* [demo_check_consistency] lets us tie everything together in a theorem that
-has no assumptions. It's pretty easy to believe that this theorem implies that
-if [demo_check_consistency] terminates, it returns true, which implies the
-consistency check works at least with one concurrent transfer. *)
+(* [demo_check_consistency] lets us tie everything together in a Hoare triple
+that has no assumptions. This implies the consistency check works at least with
+one concurrent transfer (and we can see that this technique doesn't depend on
+the particulars, we could have any number of concurrent transfers). *)
 Theorem wp_demo_check_consistency :
   {{{ True }}}
     demo_check_consistency #()
@@ -429,6 +429,12 @@ Qed.
 
 End heap.
 
+(** To really convince ourselves that the theorem means anything, we can use the
+Iris adequacy theorem (otherwise known as _soundness theorem_) to show that if
+we run [demo_check_consistency], it'll always return true. This is the intuitive
+meaning of the [wp_demo_check_consistency] Hoare triple above, but expressed
+without Iris. *)
+
 Definition bankΣ: gFunctors := #[heapΣ; lockΣ; ghost_varΣ Z].
 
 Lemma demo_check_consistency_adequate σ1 :
@@ -438,6 +444,9 @@ Proof.
   iIntros "?". by iApply wp_demo_check_consistency.
 Qed.
 
+(** This is the final theorem: if we run just the thread [demo_check_consistency
+#()] some number of [erased_steps] steps till it produces a value (with some
+still-running forked-off threads [t2]), then that value will be [#true]. *)
 Theorem demo_check_consistency_exec_true σ1 v2 t2 σ2 :
   rtc erased_step ([demo_check_consistency #()], σ1) (of_val v2 :: t2, σ2) →
   v2 = #true.
