@@ -14,7 +14,8 @@ Proof that a simple bank-like program maintains a constant sum of balances.
 
 depends: [
   "coq" {>= "8.11"}
-  "coq-iris" {>= "dev.2020-10-22.1.cfbdb375" | (>= "3.3.0" & < "4.0") | = "dev"}
+  "coq-iris" {>= "dev.2020-11-13.2.ec3a2a2a" | (>= "3.3.0" & < "4.0") | = "dev"}
+  "coq-iris-heap-lang" {>= "dev.2020-11-13.2.ec3a2a2a" | = "dev"}
 ]
 
 build: [make "-j%{jobs}%"]
