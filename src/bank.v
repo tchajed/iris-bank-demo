@@ -235,10 +235,11 @@ Proof.
   wp_apply (newlock_spec (account_inv γ2 b_ref) with "[Hb Hγ2]").
   { iExists _; iFrame. }
   iIntros (lk_b γlk2) "Hlk2".
+  wp_pures.
   iMod (inv_alloc N _ (bank_inv (γ1,γ2)) with "[Hown1 Hown2]") as "Hinv".
   { iNext. iExists _, _; iFrame.
     iPureIntro; auto. }
-  wp_pures.
+  iModIntro.
   iApply "HΦ".
   iExists _, _, (γ1,γ2); iFrame.
   iSplit; first eauto.
@@ -391,6 +392,7 @@ Proof.
   { iExists _; iFrame. }
   iIntros "_".
   wp_pures.
+  iModIntro.
   (* the calculation always returns true because of a fact we got from the
   invariant *)
   rewrite bool_decide_eq_true_2; last first.
