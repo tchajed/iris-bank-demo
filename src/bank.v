@@ -228,10 +228,12 @@ Proof.
   wp_alloc a_ref as "Ha".
   wp_alloc b_ref as "Hb".
   iMod (ghost_var_alloc 0) as (γ1) "(Hown1&Hγ1)".
+  wp_pures.
   wp_apply (newlock_spec (account_inv γ1 a_ref) with "[Ha Hγ1]").
   { iExists _; iFrame. }
   iIntros (lk_a γlk1) "Hlk1".
   iMod (ghost_var_alloc 0) as (γ2) "(Hown2&Hγ2)".
+  wp_pures.
   wp_apply (newlock_spec (account_inv γ2 b_ref) with "[Hb Hγ2]").
   { iExists _; iFrame. }
   iIntros (lk_b γlk2) "Hlk2".
@@ -272,10 +274,9 @@ Proof.
   iDestruct "Hacct2" as (bal_ref2 lk ->) "Hlk".
   iDestruct "Hlk" as (γl2) "Hlk2".
   wp_rec.
-  wp_pures.
-  wp_apply (acquire_spec with "Hlk1").
+  wp_pures. wp_apply (acquire_spec with "Hlk1").
   iIntros "(Hlocked1&Haccount1)".
-  wp_apply (acquire_spec with "Hlk2").
+  wp_pures. wp_apply (acquire_spec with "Hlk2").
   iIntros "(Hlocked2&Haccount2)".
   iDestruct "Haccount1" as (bal1) "(Hbal1&Hown1)".
   iDestruct "Haccount2" as (bal2) "(Hbal2&Hown2)".
@@ -335,7 +336,7 @@ Proof.
   wp_apply (release_spec with "[$Hlk2 $Hlocked2 Hbal2 Hown2]").
   { iExists _; iFrame. }
   iIntros "_".
-  wp_apply (release_spec with "[$Hlk1 $Hlocked1 Hbal1 Hown1]").
+  wp_pures. wp_apply (release_spec with "[$Hlk1 $Hlocked1 Hbal1 Hown1]").
   { iExists _; iFrame. }
   iIntros "_".
   wp_pures.
@@ -358,10 +359,9 @@ Proof.
   iDestruct "Hacct2" as (bal_ref2 lk ->) "Hlk".
   iDestruct "Hlk" as (γl2) "Hlk2".
   wp_rec.
-  wp_pures.
-  wp_apply (acquire_spec with "Hlk1").
+  wp_pures. wp_apply (acquire_spec with "Hlk1").
   iIntros "(Hlocked1&Haccount1)".
-  wp_apply (acquire_spec with "Hlk2").
+  wp_pures. wp_apply (acquire_spec with "Hlk2").
   iIntros "(Hlocked2&Haccount2)".
   iDestruct "Haccount1" as (bal1) "(Hbal1&Hown1)".
   iDestruct "Haccount2" as (bal2) "(Hbal2&Hown2)".
@@ -388,7 +388,7 @@ Proof.
   wp_apply (release_spec with "[$Hlk2 $Hlocked2 Hbal2 Hown2]").
   { iExists _; iFrame. }
   iIntros "_".
-  wp_apply (release_spec with "[$Hlk1 $Hlocked1 Hbal1 Hown1]").
+  wp_pures. wp_apply (release_spec with "[$Hlk1 $Hlocked1 Hbal1 Hown1]").
   { iExists _; iFrame. }
   iIntros "_".
   wp_pures.
@@ -415,7 +415,7 @@ Proof using All.
   (* we use [#Hb] to put the newly created [is_bank] in the "persistent context"
   in the Iris Proof Mode - these are persistent facts and thus are available
   even when we need to split to prove a separating conjunction *)
-  iIntros (b) "#Hb".
+  iIntros (b) "#Hb". wp_pures.
   (* the proof is easy now - the fork rule requires us to split the context and
   prove any Hoare triple for the forked thread. [transfer] only needs [Hb], but
   that's persistent and will thus be available. We've coincidentally already
@@ -424,7 +424,7 @@ Proof using All.
   - wp_apply (wp_transfer with "Hb").
     auto.
   - (* [check_consistency] always returns true, using [is_bank] *)
-    wp_apply (wp_check_consistency with "Hb").
+    wp_pures; wp_apply (wp_check_consistency with "Hb").
     iIntros "_".
     by iApply "HΦ".
 Qed.
