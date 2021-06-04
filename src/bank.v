@@ -121,7 +121,7 @@ The syntax for separation logic stuff here includes:
 Section heap.
 
 (* mostly standard boilerplate *)
-Context `{!heapG Σ}.
+Context `{!heapGS Σ}.
 Context `{!lockG Σ}.
 Context `{!ghost_varG Σ Z}.
 Let N := nroot.@"bank".
