@@ -15,4 +15,4 @@ The demo is entirely in a single well-commented Coq file [bank.v](src/bank.v).
 
 ## Compiling
 
-To compile, just run `make`. You'll need Coq with Iris installed.
+To compile, just run `make`. You'll need Coq with a development version of Iris installed.
