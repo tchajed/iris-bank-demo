@@ -442,7 +442,7 @@ Definition bankΣ: gFunctors := #[heapΣ; lockΣ; ghost_varΣ Z].
 Lemma demo_check_consistency_adequate σ1 :
   adequate NotStuck (demo_check_consistency #()) σ1 (λ v _, v = #true).
 Proof.
-  eapply (heap_adequacy bankΣ) => ??.
+  eapply (heap_adequacy bankΣ) => ?.
   iIntros "?". by iApply wp_demo_check_consistency.
 Qed.
 
